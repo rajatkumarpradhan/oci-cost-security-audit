@@ -1,0 +1,80 @@
+{
+  "buckets": [
+    {
+      "name": "team-assets-public",
+      "public_access": true
+    },
+    {
+      "name": "backups-private",
+      "public_access": false
+    }
+  ],
+  "security_lists": [
+    {
+      "name": "web-sl",
+      "ingress": [
+        {
+          "source": "10.0.0.0/16",
+          "port": 443
+        }
+      ]
+    },
+    {
+      "name": "legacy-sl",
+      "ingress": [
+        {
+          "source": "0.0.0.0/0",
+          "port": 22
+        }
+      ]
+    }
+  ],
+  "iam_policies": [
+    {
+      "name": "tenant-admins",
+      "group": "Administrators",
+      "statements": [
+        "Allow group Administrators to manage all-resources in tenancy"
+      ]
+    },
+    {
+      "name": "devs-too-broad",
+      "group": "Developers",
+      "statements": [
+        "Allow group Developers to manage all-resources in tenancy"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "name": "priya.sharma",
+      "mfa_enabled": true,
+      "api_keys": [
+        {
+          "created": "2026-08-01"
+        }
+      ]
+    },
+    {
+      "name": "arjun.mehta",
+      "mfa_enabled": false,
+      "api_keys": [
+        {
+          "created": "2026-03-15"
+        }
+      ]
+    }
+  ],
+  "budgets": [
+    {
+      "name": "prod-monthly",
+      "compartment": "prod",
+      "amount": 1200
+    },
+    {
+      "name": "dev-monthly",
+      "compartment": "dev",
+      "amount": 100
+    }
+  ]
+}
