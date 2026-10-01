@@ -34,6 +34,7 @@ Python 3.10+, standard library only - no install, no network:
 ```bash
 python3 audit.py --cost-report fixtures/cost_report.csv --snapshot fixtures/tenancy_snapshot.json
 python3 audit.py --cost-report fixtures/cost_report.csv --snapshot fixtures/tenancy_snapshot.json --output report.json
+python3 audit.py --cost-report fixtures/cost_report.csv --snapshot fixtures/tenancy_snapshot.json --json   # structured JSON on stdout (summary, cost tables, findings)
 python3 audit.py --cost-report fixtures/cost_report.csv --snapshot fixtures/tenancy_snapshot.json --fail-on HIGH   # CI gate; exits 1
 python3 -m unittest discover -s tests -v
 ```

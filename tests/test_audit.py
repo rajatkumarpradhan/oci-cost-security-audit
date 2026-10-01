@@ -119,5 +119,52 @@ class TestGate(unittest.TestCase):
         self.assertTrue(all({"rule", "severity", "resource", "detail"} <= set(f) for f in report["findings"]))
 
 
+class TestJsonMode(unittest.TestCase):
+    ARGS = ["--cost-report", os.path.join(FIX, "cost_report.csv"),
+            "--snapshot", os.path.join(FIX, "tenancy_snapshot.json")]
+
+    def run_main(self, extra):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = audit.main(self.ARGS + extra)
+        return code, buf.getvalue()
+
+    def test_json_stdout_is_valid_and_complete(self):
+        code, out = self.run_main(["--json"])
+        self.assertEqual(code, 0)
+        report = json.loads(out)
+        self.assertEqual(set(report), {"summary", "cost_by_service", "cost_by_compartment",
+                                       "month_over_month", "findings"})
+        self.assertEqual(report["summary"]["finding_count"], len(report["findings"]))
+        self.assertEqual(sum(report["summary"]["findings_by_severity"].values()),
+                         len(report["findings"]))
+        self.assertAlmostEqual(report["summary"]["total_cost"],
+                               sum(report["cost_by_service"].values()), places=1)
+        sev = [audit.SEVERITY_ORDER[f["severity"]] for f in report["findings"]]
+        self.assertEqual(sev, sorted(sev, reverse=True))
+
+    def test_text_output_unchanged_without_flag(self):
+        code, out = self.run_main([])
+        self.assertEqual(code, 0)
+        self.assertTrue(out.startswith("=== OCI cost and security audit"))
+        with self.assertRaises(ValueError):
+            json.loads(out)
+
+    def test_json_flag_keeps_fail_on_gate(self):
+        code, out = self.run_main(["--json", "--fail-on", "HIGH"])
+        self.assertEqual(code, 1)
+        json.loads(out.split("\nGate")[0])
+
+    def test_json_stdout_matches_output_file(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            path = os.path.join(t, "r.json")
+            _, out = self.run_main(["--json", "--output", path])
+            with open(path, encoding="utf-8") as fh:
+                self.assertEqual(json.loads(out), json.load(fh))
+
+
 if __name__ == "__main__":
     unittest.main()

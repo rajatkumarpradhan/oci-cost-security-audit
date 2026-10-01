@@ -170,11 +170,33 @@ def render_text(result):
     return "\n".join(lines)
 
 
+def to_report(result):
+    """Structured report shared by --json stdout and --output file."""
+    counts = {}
+    for f in result.findings:
+        counts[f.severity] = counts.get(f.severity, 0) + 1
+    return {
+        "summary": {
+            "total_cost": round(sum(result.cost_by_service.values()), 2),
+            "finding_count": len(result.findings),
+            "findings_by_severity": counts,
+            "worst_severity": result.worst_severity(),
+        },
+        "cost_by_service": result.cost_by_service,
+        "cost_by_compartment": result.cost_by_compartment,
+        "month_over_month": result.month_over_month,
+        "findings": [f.as_dict() for f in sorted(
+            result.findings, key=lambda x: -SEVERITY_ORDER[x.severity])],
+    }
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Offline OCI cost and security audit from exported data")
     ap.add_argument("--cost-report", required=True, help="CSV: date,service,compartment,usage_amount,cost")
     ap.add_argument("--snapshot", required=True, help="JSON tenancy configuration snapshot")
     ap.add_argument("--output", help="write JSON report here")
+    ap.add_argument("--json", action="store_true", dest="json_out",
+                    help="print the report as JSON on stdout instead of the text tables")
     ap.add_argument("--fail-on", choices=list(SEVERITY_ORDER), default=None,
                     help="exit 1 if any finding is at or above this severity (CI gate)")
     args = ap.parse_args(argv)
@@ -185,15 +207,13 @@ def main(argv=None):
     analyze_cost(rows, snap["budgets"], result)
     audit_security(snap, result)
 
-    print(render_text(result))
+    if args.json_out:
+        print(json.dumps(to_report(result), indent=2))
+    else:
+        print(render_text(result))
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
-            json.dump({
-                "cost_by_service": result.cost_by_service,
-                "cost_by_compartment": result.cost_by_compartment,
-                "month_over_month": result.month_over_month,
-                "findings": [f.as_dict() for f in result.findings],
-            }, fh, indent=2)
+            json.dump(to_report(result), fh, indent=2)
     if args.fail_on and result.findings:
         worst = result.worst_severity()
         if SEVERITY_ORDER[worst] >= SEVERITY_ORDER[args.fail_on]:
