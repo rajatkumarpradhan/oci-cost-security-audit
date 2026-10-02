@@ -166,5 +166,50 @@ class TestJsonMode(unittest.TestCase):
                 self.assertEqual(json.loads(out), json.load(fh))
 
 
+class TestSensitivePorts(unittest.TestCase):
+    def audit(self, ingress):
+        r = audit.AuditResult()
+        snap = {"buckets": [], "security_lists": [{"name": "x", "ingress": ingress}],
+                "iam_policies": [], "users": [], "budgets": [{"name": "b"}]}
+        audit.audit_security(snap, r, today=date(2026, 9, 1))
+        return r.findings
+
+    def test_each_new_port_flagged_with_documented_severity(self):
+        for port, (svc, sev) in audit.DATA_PORTS.items():
+            fs = self.audit([{"source": "0.0.0.0/0", "port": port}])
+            self.assertEqual([(f.rule, f.severity) for f in fs], [("open_data_port", sev)], port)
+            self.assertIn(svc, fs[0].detail)
+
+    def test_private_source_not_flagged(self):
+        self.assertEqual(self.audit([{"source": "10.0.0.0/16", "port": 6379}]), [])
+
+    def test_ssh_rdp_unchanged(self):
+        fs = self.audit([{"source": "0.0.0.0/0", "port": 22}, {"source": "0.0.0.0/0", "port": 3389}])
+        self.assertEqual({f.rule for f in fs}, {"open_admin_port"})
+        self.assertTrue(all(f.severity == "HIGH" for f in fs))
+        self.assertNotIn("stateful", fs[0].detail)
+
+    def test_stateful_vs_stateless_distinct(self):
+        a = self.audit([{"source": "0.0.0.0/0", "port": 5432}])[0].detail
+        b = self.audit([{"source": "0.0.0.0/0", "port": 5432, "stateless": True}])[0].detail
+        self.assertIn("stateful rule", a)
+        self.assertIn("stateless rule", b)
+        self.assertNotEqual(a, b)
+
+    def test_port_range_expands(self):
+        fs = self.audit([{"source": "0.0.0.0/0", "port_range": [5400, 5440]}])
+        self.assertEqual([f.rule for f in fs], ["open_data_port"])
+        both = self.audit([{"source": "0.0.0.0/0", "port_range": [20, 25]}])
+        self.assertEqual([f.rule for f in both], ["open_admin_port"])
+
+    def test_non_sensitive_port_ignored(self):
+        self.assertEqual(self.audit([{"source": "0.0.0.0/0", "port": 443}]), [])
+
+    def test_fixture_exercises_new_ports(self):
+        r = run_result()
+        data = {(f.resource, f.severity) for f in r.findings if f.rule == "open_data_port"}
+        self.assertEqual(data, {("security-list:data-sl", "CRITICAL"), ("security-list:data-sl", "HIGH")})
+
+
 if __name__ == "__main__":
     unittest.main()

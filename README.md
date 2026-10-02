@@ -22,6 +22,9 @@ A cost-and-posture audit CLI in the shape an OCI architect actually needs: point
 | --- | --- | --- |
 | `public_bucket` | HIGH | An object storage bucket allows public access |
 | `open_admin_port` | HIGH | A security list opens port 22/3389 to `0.0.0.0/0` |
+| `open_data_port` | HIGH / CRITICAL | A security list opens a data-service port to `0.0.0.0/0`: 3306 MySQL and 5432 PostgreSQL are HIGH; 6379 Redis, 27017 MongoDB and 9200 Elasticsearch are CRITICAL because they often run unauthenticated by default |
+
+Port rules accept `port` or an inclusive `port_range: [lo, hi]`. Rules with `"stateless": true` are reported with a note that return traffic needs its own egress rule; stateful rules are noted as tracked. Severity is the same for both, the detail text differs. Egress rules and service-level authentication are not evaluated.
 | `broad_policy` | MEDIUM | A non-admin group may `manage all-resources` in tenancy |
 | `user_without_mfa` | MEDIUM | A console user has no MFA enabled |
 | `old_api_key` | LOW | A user API key is older than 90 days |

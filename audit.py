@@ -14,6 +14,15 @@ from datetime import date
 
 SEVERITY_ORDER = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 ADMIN_PORTS = {22, 3389}
+# Data-service ports: port -> (service, severity). Redis, MongoDB and Elasticsearch
+# often run without authentication by default, so world exposure is rated CRITICAL.
+DATA_PORTS = {
+    3306: ("MySQL", "HIGH"),
+    5432: ("PostgreSQL", "HIGH"),
+    6379: ("Redis", "CRITICAL"),
+    27017: ("MongoDB", "CRITICAL"),
+    9200: ("Elasticsearch", "CRITICAL"),
+}
 API_KEY_AGE_WARN_DAYS = 90
 MOM_SPIKE_PCT = 30.0
 MOM_SPIKE_MIN_DELTA = 50.0
@@ -120,6 +129,20 @@ def load_snapshot(path):
     return snap
 
 
+def _rule_ports(rule):
+    """Ports covered by an ingress rule: `port`, or inclusive `port_range` [lo, hi]."""
+    if "port_range" in rule:
+        lo, hi = rule["port_range"]
+        return range(int(lo), int(hi) + 1)
+    return [rule["port"]] if "port" in rule else []
+
+
+def _state_note(rule):
+    if rule.get("stateless"):
+        return "; stateless rule, return traffic needs its own egress rule and the rule is not connection-tracked"
+    return "; stateful rule, return traffic is allowed automatically"
+
+
 def audit_security(snap, result, today=None):
     today = today or date.today()
     for b in snap["buckets"]:
@@ -128,9 +151,16 @@ def audit_security(snap, result, today=None):
                        "object storage bucket allows public access")
     for sl in snap["security_lists"]:
         for rule in sl.get("ingress", []):
-            if rule.get("source") == "0.0.0.0/0" and rule.get("port") in ADMIN_PORTS:
+            if rule.get("source") != "0.0.0.0/0":
+                continue
+            ports = set(_rule_ports(rule))
+            for p in sorted(ports & ADMIN_PORTS):
                 result.add("open_admin_port", "HIGH", f"security-list:{sl['name']}",
-                           f"ingress from 0.0.0.0/0 to port {rule['port']}")
+                           f"ingress from 0.0.0.0/0 to port {p}" + (_state_note(rule) if rule.get("stateless") else ""))
+            for p in sorted(ports & set(DATA_PORTS)):
+                svc, sev = DATA_PORTS[p]
+                result.add("open_data_port", sev, f"security-list:{sl['name']}",
+                           f"ingress from 0.0.0.0/0 to port {p} ({svc})" + _state_note(rule))
     for p in snap["iam_policies"]:
         for stmt in p.get("statements", []):
             low = stmt.lower()

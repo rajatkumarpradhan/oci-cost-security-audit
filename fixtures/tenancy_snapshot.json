@@ -27,6 +27,24 @@
           "port": 22
         }
       ]
+    },
+    {
+      "name": "data-sl",
+      "ingress": [
+        {
+          "source": "0.0.0.0/0",
+          "port": 6379
+        },
+        {
+          "source": "0.0.0.0/0",
+          "port": 5432,
+          "stateless": true
+        },
+        {
+          "source": "10.0.0.0/16",
+          "port": 3306
+        }
+      ]
     }
   ],
   "iam_policies": [
